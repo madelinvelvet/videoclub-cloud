@@ -19,8 +19,9 @@ export default async function PeliculaDetalle({ params }) {
     );
   }
 
-  const inquilinos = pelicula.alquiladaPor || [];
-  const limiteAlcanzado = inquilinos.length >= 4;
+  // Si alquiladaPor no es una lista válida, lo convertimos en un array vacío
+const inquilinos = Array.isArray(pelicula.alquiladaPor) ? pelicula.alquiladaPor : [];
+const limiteAlcanzado = inquilinos.length >= 4;
 
   // Server Action para procesar el alquiler múltiple
   async function alquilarPelicula(formData) {
