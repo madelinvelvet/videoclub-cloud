@@ -3,13 +3,12 @@ import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
-// Lista con pósteres reales y descripciones añadidas
 const PELICULAS_INICIALES = [
   { 
     id: '1', 
     titulo: 'Pulp Fiction', 
     genero: 'Acción / Crimen', 
-    poster: '/pulp-fiction.jpg', // <- Ruta local directa
+    poster: '/pulp-fiction.jpg',
     descripcion: 'Las vidas de dos distribuidores de marihuana, un boxeador, la esposa de un gángster y dos bandidos se entrelazan en cuatro historias de violencia y redención.'
   },
   { 
@@ -36,13 +35,14 @@ const PELICULAS_INICIALES = [
 ];
 
 export default async function Home() {
+  // 1. Intentamos traer lo que ya está guardado en internet
   let peliculas = await kv.get('peliculas_estado');
   
-  // TRUCO TEMPORAL: Quitamos el '!' para obligar a actualizar la base de datos
-  if (peliculas) { 
-    await kv.set('peliculas_estado', PELICULAS_INICIALES.map(p => ({ ...p, alquiladaPor: [] })));
-    peliculas = await kv.get('peliculas_estado');
-  
+  // 2. CÓDIGO SEGURO: Si no hay NADA en la base de datos (primera vez absoluta), las creamos
+  if (!peliculas || peliculas.length === 0) {
+    const estadoInicial = PELICULAS_INICIALES.map(p => ({ ...p, alquiladaPor: [] }));
+    await kv.set('peliculas_estado', estadoInicial);
+    peliculas = estadoInicial;
   }
 
   return (
@@ -53,20 +53,21 @@ export default async function Home() {
           <p className="text-slate-400">Alquila tus películas favoritas</p>
         </header>
 
-        {/* Cartelera estilo Netflix */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
           {peliculas.map((pelicula) => {
-            const cuposDisponibles = 4 - (pelicula.alquiladaPor?.length || 0);
+            // Aseguramos que alquiladaPor sea un array para evitar errores visuales
+            const inquilinos = Array.isArray(pelicula.alquiladaPor) ? pelicula.alquiladaPor : [];
+            const cuposDisponibles = 4 - inquilinos.length;
             
             return (
               <div key={pelicula.id} className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-lg flex flex-col justify-between group">
                 <div className="relative aspect-[2/3] w-full bg-slate-950 overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img 
-                      src={pelicula.poster} 
-                      alt={pelicula.titulo}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
+                  <img 
+                    src={pelicula.poster} 
+                    alt={pelicula.titulo}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
                   <div className="absolute top-2 right-2 bg-slate-900/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-bold text-indigo-300 border border-slate-700">
                     {cuposDisponibles > 0 ? `${cuposDisponibles} Libres` : 'Agotada'}
                   </div>
@@ -76,6 +77,13 @@ export default async function Home() {
                   <div className="mb-4">
                     <h2 className="text-lg font-bold line-clamp-1">{pelicula.titulo}</h2>
                     <p className="text-xs text-indigo-400 font-medium">{pelicula.genero}</p>
+                    
+                    {/* Pequeño extra opcional: Muestra quién la tiene desde la portada */}
+                    {inquilinos.length > 0 && (
+                      <p className="text-[11px] text-slate-400 mt-1 truncate">
+                        👥 {inquilinos.join(', ')}
+                      </p>
+                    )}
                   </div>
 
                   <Link 

@@ -5,7 +5,6 @@ import Link from 'next/link';
 export const dynamic = 'force-dynamic';
 
 export default async function PeliculaDetalle({ params }) {
-  // Obtener el ID desde la URL de manera segura
   const { id } = await params;
   const peliculas = await kv.get('peliculas_estado') || [];
   const pelicula = peliculas.find(p => p.id === id);
@@ -19,11 +18,10 @@ export default async function PeliculaDetalle({ params }) {
     );
   }
 
-  // Si alquiladaPor no es una lista válida, lo convertimos en un array vacío
-const inquilinos = Array.isArray(pelicula.alquiladaPor) ? pelicula.alquiladaPor : [];
-const limiteAlcanzado = inquilinos.length >= 4;
+  const inquilinos = Array.isArray(pelicula.alquiladaPor) ? pelicula.alquiladaPor : [];
+  const limiteAlcanzado = inquilinos.length >= 4;
 
-  // Server Action para procesar el alquiler múltiple
+  // ACCIÓN 1: Alquilar película
   async function alquilarPelicula(formData) {
     'use server';
     const nombre = formData.get('nombreInquilino')?.trim();
@@ -34,7 +32,6 @@ const limiteAlcanzado = inquilinos.length >= 4;
     const listaActualizada = listaActual.map(p => {
       if (p.id === id) {
         const copiaInquilinos = [...(p.alquiladaPor || [])];
-        // Evitar que alquile si ya llegó a 4 o si esa persona ya la tiene
         if (copiaInquilinos.length < 4 && !copiaInquilinos.includes(nombre)) {
           copiaInquilinos.push(nombre);
         }
@@ -45,6 +42,27 @@ const limiteAlcanzado = inquilinos.length >= 4;
 
     await kv.set('peliculas_estado', listaActualizada);
     revalidatePath(`/pelicula/${id}`);
+    revalidatePath('/'); // Fuerza a la cartelera principal a enterarse del cambio
+  }
+
+  // ACCIÓN 2: Devolver película (Eliminar un inquilino)
+  async function devolverPelicula(formData) {
+    'use server';
+    const nombreADevolver = formData.get('nombreInquilino');
+    
+    const listaActual = await kv.get('peliculas_estado') || [];
+    const listaActualizada = listaActual.map(p => {
+      if (p.id === id) {
+        // Filtramos la lista para quitar a esta persona
+        const copiaInquilinos = (p.alquiladaPor || []).filter(nombre => nombre !== nombreADevolver);
+        return { ...p, alquiladaPor: copiaInquilinos };
+      }
+      return p;
+    });
+
+    await kv.set('peliculas_estado', listaActualizada);
+    revalidatePath(`/pelicula/${id}`);
+    revalidatePath('/'); // Actualiza el inicio también
   }
 
   return (
@@ -55,13 +73,11 @@ const limiteAlcanzado = inquilinos.length >= 4;
         </Link>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 bg-slate-800 p-6 md:p-8 rounded-2xl border border-slate-700 shadow-2xl">
-          {/* Columna Póster */}
           <div className="aspect-[2/3] w-full bg-slate-950 rounded-xl overflow-hidden border border-slate-600">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={pelicula.poster} alt={pelicula.titulo} className="w-full h-full object-cover" />
           </div>
 
-          {/* Columna Información e Interacción */}
           <div className="md:col-span-2 flex flex-col justify-between">
             <div>
               <h1 className="text-3xl font-extrabold mb-1">{pelicula.titulo}</h1>
@@ -73,7 +89,6 @@ const limiteAlcanzado = inquilinos.length >= 4;
               </p>
             </div>
 
-            {/* Formulario de Alquiler */}
             <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-700">
               <h3 className="text-sm font-bold text-slate-200 mb-3">Nuevo Alquiler ({inquilinos.length}/4 ocupados)</h3>
               
@@ -88,31 +103,42 @@ const limiteAlcanzado = inquilinos.length >= 4;
                   />
                   <button 
                     type="submit"
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap"
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors"
                   >
                     Alquilar
                   </button>
                 </form>
               ) : (
-                <p className="text-sm text-amber-400 font-medium">⚠️ Todos los cupos de alquiler para esta película están completos.</p>
+                <p className="text-sm text-amber-400 font-medium">⚠️ Todos los cupos de alquiler están llenos.</p>
               )}
             </div>
           </div>
         </div>
 
-        {/* Sección de inquilinos actuales */}
+        {/* Lista de Inquilinos con botón de devolución */}
         <div className="mt-8 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            👥 Personas que la están viendo actualmente
           </h2>
           {inquilinos.length > 0 ? (
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {inquilinos.map((persona, index) => (
-                <li key={index} className="bg-slate-900 border border-slate-700 p-3 rounded-xl flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-sm text-white">
-                    {persona.charAt(0).toUpperCase()}
+                <li key={index} className="bg-slate-900 border border-slate-700 p-3 rounded-xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-sm text-white">
+                      {persona.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-sm font-medium text-slate-200">{persona}</span>
                   </div>
-                  <span className="text-sm font-medium text-slate-200">{persona}</span>
+                  
+                  {/* Formulario individual para eliminar inquilino */}
+                  <form action={devolverPelicula}>
+                    <input type="hidden" name="nombreInquilino" value={persona} />
+                    <button 
+                      type="submit"
+                      className="text-xs bg-rose-950/40 hover:bg-rose-600 text-rose-400 hover:text-white px-2.5 py-1.5 rounded-lg border border-rose-800/60 transition-all font-medium"
+                    >
+                    </button>
+                  </form>
                 </li>
               ))}
             </ul>
